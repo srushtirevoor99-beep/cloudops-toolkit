@@ -8,3 +8,4 @@ tar -czf "$DEST/backup-$DATE.tar.gz" "$SOURCE"
 
 echo "Backup saved to $DEST/backup-$DATE.tar.gz"
 
+# Author:Srushti
