@@ -63,7 +63,6 @@ chmod +x scripts/*.sh
 - `backup.sh` is being modified to upload backups to an **S3 bucket** instead of storing them only locally
 - An IAM user/role scoped to **least-privilege S3 access** (not root/admin credentials) for the backup upload
 
-## What I learned
 
 ## What I learned
 
