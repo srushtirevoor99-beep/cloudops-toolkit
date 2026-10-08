@@ -1,5 +1,4 @@
 # CloudOps Toolkit
-[![CI](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/ci.yml)
 
 A set of Bash automation scripts for Linux system administration, built as a hands-on project to learn Git workflows, CI/CD, and cloud infrastructure (AWS) from the ground up.
 
