@@ -1,7 +1,7 @@
 #!/bin/bash
 # Author: Srushti
 # Usage: backup.sh <source_dir> <dest_dir>
-# Optional: export BUCKET_NAME=my-bucket to also upload the backup to S3
+# Optional: export BUCKET_NAME=my-bucket to also upload to S3
 
 SOURCE=$1
 DEST=$2
@@ -13,8 +13,18 @@ if [[ -z "$SOURCE" || -z "$DEST" ]]; then
     exit 1
 fi
 
+if [[ ! -d "$SOURCE" ]]; then
+    echo "Error: source '$SOURCE' does not exist" >&2
+    exit 1
+fi
+
 mkdir -p "$DEST"
-tar -czf "$ARCHIVE" "$SOURCE"
+
+if ! tar -czf "$ARCHIVE" "$SOURCE"; then
+    echo "Error: tar failed, removing incomplete archive" >&2
+    rm -f "$ARCHIVE"
+    exit 1
+fi
 echo "Backup saved to $ARCHIVE"
 
 # Keep only the 5 most recent local backups
