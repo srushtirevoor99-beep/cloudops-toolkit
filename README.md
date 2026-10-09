@@ -1,86 +1,356 @@
-# CloudOps Toolkit
-[![CI](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/lint.yml)
+# ☁️ CloudOps Toolkit
 
-A set of Bash automation scripts for Linux system administration, built as a hands-on project to learn Git workflows, CI/CD, and cloud infrastructure (AWS) from the ground up.
+[![CI](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/ci.yml)
+[![ShellCheck](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/lint.yml/badge.svg)](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/lint.yml)
 
-This isn't just a script collection — it's also a record of practicing real engineering workflow: feature branches, pull requests, code review via CI, and now, extending into cloud deployment.
+A hands-on CloudOps project that combines **Bash scripting, Linux administration, GitHub Actions, and Amazon Web Services (AWS)** to automate system tasks and implement a cloud-based backup workflow.
 
-## What's in here
+The project creates compressed backups, uploads them to Amazon S3, and verifies that they can be downloaded and inspected from an Amazon EC2 instance using an IAM role. GitHub Actions and ShellCheck are used to validate the repository's shell scripts.
 
-| Script | What it does |
-|---|---|
-| `backup.sh` | Creates a compressed, timestamped backup of a given folder and keeps the 5 most recent copies |
-| `disk-alert.sh` | Checks disk usage and prints a warning if it cross a set threshold (e.g. 80%) |
-| `memory-alert.sh` | Checks available memory and alerts if usage crosses a set threshold |
-| `log-cleaner.sh` | Deletes or archieves log files older than a set number of days to free up disk space |
-| `log-analyzer.sh` | Parses a log file and reports things like error counts, top IPs, or most requested paths |
-
-## How to use
-
-\`\`\`bash
-git clone https://github.com/srushtirevoor99-beep/cloudops-toolkit.git
-cd cloudops-toolkit
-chmod +x scripts/*.sh
-\`\`\`
-
-### backup.sh
-\`\`\`bash
-./scripts/backup.sh /path/to/folder
-\`\`\`
-
-### disk-alert.sh
-\`\`\`bash
-./scripts/disk-alert.sh          # uses default threshold
-./scripts/disk-alert.sh 85       # custom threshold, e.g. 85%
-\`\`\`
-
-### memory-alert.sh
-\`\`\`bash
-./scripts/memory-alert.sh
-\`\`\`
-
-### log-cleaner.sh
-\`\`\`bash
-./scripts/log-cleaner.sh /var/log 7     # deletes logs older than 7 days
-\`\`\`
-
-### log-analyzer.sh
-\`\`\`bash
-./scripts/log-analyzer.sh /var/log/nginx/access.log
-\`\`\`
-
-## Engineering practices used in this project
-
-- **Feature branches** for each new script/feature, merged via pull request rather than committing directly to `main`
-- **GitHub Issues → branch → PR → merge** workflow (used for the `memory-alert.sh` feature)
-- Resolved a real **merge conflict**, including a UTF-16 encoding issue in `README.md`
-- Used **interactive rebase** to squash commits into a clean history, and **cherry-pick** to move specific commits between branches
-- **SSH authentication** set up with GitHub; all branches pushed, with releases tagged (`v0.1.0`, `v0.2.0`)
-- **Continuous Integration**: a GitHub Actions workflow (`.github/workflows/lint.yml`) runs [ShellCheck](https://www.shellcheck.net/) on every push and pull request to `main`
-
-## Cloud extension (in progress)
-
-- An EC2 (t2.micro, Ubuntu) instance to run and serve these scripts in a real cloud environment
-- `backup.sh` is being modified to upload backups to an **S3 bucket** instead of storing them only locally
-- An IAM user/role scoped to **least-privilege S3 access** (not root/admin credentials) for the backup upload
-
-
-## What I learned
-
-- How to actually resolve a merge conflict instead of just reading about one, including fixing a UTF-16 encoding issue in README.md that made Git treat the whole file as changed
-- How to write Bash scripts that take arguments and validate input before running, instead of hardcoding values
-- The difference between committing directly to main and using a proper branch → PR → merge workflow, and why it matters even as a solo developer
-- How GitHub Actions CI works: writing a workflow file, debugging YAML indentation errors, and getting ShellCheck to pass on every push
-- Why using an IAM role with least-privilege access is safer than using AWS root/admin credentials, while extending this project into EC2 and S3
-
-## Setup requirements
-
-- Bash (Linux/WSL2 — developed and tested on Ubuntu via WSL2 on Windows)
-
-## Project status
-
-🚧 Actively being extended — currently adding AWS EC2/S3 integration and IAM-based access control.
+This project documents practical learning in Linux, automation, version control, CI, cloud storage, and cloud infrastructure.
 
 ---
 
-*Built by [Srushti](https://github.com/srushtirevoor99-beep) while learning Linux, Git, and cloud infrastructure.*
+## Project Overview
+
+CloudOps Toolkit is a collection of Bash scripts designed to simplify common Linux administration tasks.
+
+The main cloud workflow follows these steps:
+
+1. Select a directory containing files to back up.
+2. Create a compressed, timestamped `.tar.gz` archive.
+3. Store a local copy of the backup.
+4. Upload the archive to an Amazon S3 bucket.
+5. Download the uploaded archive from an EC2 instance.
+6. Inspect the archive contents to verify that it is readable.
+7. Run automated repository checks using GitHub Actions.
+
+The project demonstrates how local Linux automation can be extended to use cloud infrastructure.
+
+## Features
+
+- **Automated backups:** Creates compressed, timestamped backup archives.
+- **Amazon S3 integration:** Uploads backup archives to cloud storage.
+- **Local backup retention:** Keeps the five most recent local backups, as implemented in the script.
+- **Upload failure handling:** Preserves the local backup if an S3 upload fails and reports an error.
+- **EC2 integration:** Uses an Amazon EC2 instance to download and verify cloud backups.
+- **IAM role-based access:** Uses temporary AWS credentials provided through an attached instance role instead of storing long-term AWS access keys on EC2.
+- **Automated code checks:** Uses GitHub Actions to run repository validation and ShellCheck workflows.
+- **Linux administration utilities:** Includes scripts for disk usage, memory usage, system information, and log analysis and cleanup.
+
+> Note: The backup workflow and CI checks have been verified. The other utility scripts and backup-retention edge cases still need more comprehensive functional testing.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TD
+    A[Source Files / Test Data] --> B[Bash Backup Script]
+    B --> C[Compressed Backup Archive]
+    C --> D[Local Backup Directory]
+    C -->|AWS CLI Upload| E[(Amazon S3 Bucket)]
+    E -->|AWS CLI Download| F[Amazon EC2 Instance]
+    F --> G[Inspect Archive Using tar]
+    
+    H[GitHub Repository] --> I[GitHub Actions]
+    I --> J[CI Validation]
+    I --> K[ShellCheck]
+```
+
+### How it works
+
+- **Bash** creates the backup archive.
+- **Amazon S3** stores a copy of the archive in the cloud.
+- **Amazon EC2** provides a Linux environment to download and inspect the backup.
+- **AWS IAM** authorizes the EC2 instance to access AWS resources.
+- **AWS Systems Manager** provides browser-based access to the instance.
+- **GitHub Actions** runs automated checks when code changes are pushed or pull requests are opened.
+
+---
+
+## Technology Stack
+
+| Technology | Purpose |
+|---|---|
+| Bash | Automation and Linux administration scripts |
+| Linux / Ubuntu on WSL2 | Local development and testing |
+| Amazon Linux 2023 | Operating system on the EC2 instance |
+| Amazon EC2 | Cloud virtual machine for backup verification |
+| Amazon S3 | Cloud storage for backup archives |
+| AWS IAM | Identity and access management |
+| AWS Systems Manager | Browser-based instance access |
+| AWS CLI v2 | Command-line interaction with AWS |
+| Git | Version control |
+| GitHub | Repository hosting and collaboration |
+| GitHub Actions | Continuous integration workflows |
+| ShellCheck | Static analysis for shell scripts |
+
+---
+
+## AWS Configuration
+
+The following AWS resources were configured and used during the project.
+
+| Resource | Configuration |
+|---|---|
+| AWS Region | Asia Pacific (Mumbai) — `ap-south-1` |
+| EC2 Instance Name | `cloudops-backup-server` |
+| EC2 Instance Type | `t3.micro` |
+| Operating System | Amazon Linux 2023 |
+| S3 Bucket | `srushti-cloudops-backups-4821` |
+| S3 Backup Prefix | `backups/` |
+| IAM Role | `cloudops-ec2-s3-role` |
+| Instance Access | Systems Manager Session Manager and EC2 Instance Connect |
+
+### Role of each AWS service
+
+**Amazon EC2**
+
+Provides a cloud-based Linux virtual machine on which AWS CLI commands can be executed and the backup archive can be downloaded and inspected.
+
+**Amazon S3**
+
+Provides durable object storage for backup archives, keeping a copy separate from the local backup directory.
+
+**AWS IAM Role**
+
+Grants the EC2 instance permission to access AWS services without requiring long-term access keys to be stored on the instance.
+
+**AWS Systems Manager**
+
+Provides browser-based terminal access to the EC2 instance, making administration possible without relying solely on a direct SSH connection.
+
+> **Security consideration:** The configured EC2 role currently uses `AmazonS3FullAccess`. This is broader than required for a dedicated backup workflow. Replacing it with a bucket-scoped, least-privilege policy is a planned improvement.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Linux, macOS, or Windows with WSL2
+- Bash and standard Linux utilities, including `tar`
+- Git
+- AWS CLI v2 for cloud operations
+- An AWS account and an S3 bucket for upload testing
+- Appropriate AWS permissions for the operations being performed
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/srushtirevoor99-beep/cloudops-toolkit.git
+cd cloudops-toolkit
+```
+
+Make the scripts executable:
+
+```bash
+chmod +x scripts/*.sh
+```
+
+### 2. Run a local backup
+
+The backup script accepts a source directory and a destination directory.
+
+```bash
+./scripts/backup.sh <source_dir> <dest_dir>
+```
+
+Example:
+
+```bash
+mkdir -p ~/testdata ~/testbackups
+echo "CloudOps backup test" > ~/testdata/file.txt
+
+./scripts/backup.sh ~/testdata ~/testbackups
+```
+
+List the generated backups:
+
+```bash
+ls -lh ~/testbackups
+```
+
+### 3. Upload a backup to Amazon S3
+
+Set the name of your own S3 bucket:
+
+```bash
+export BUCKET_NAME=your-bucket-name
+```
+
+Run the backup script:
+
+```bash
+./scripts/backup.sh ~/testdata ~/testbackups
+```
+
+Verify that the archive exists in S3:
+
+```bash
+aws s3 ls "s3://$BUCKET_NAME/backups/"
+```
+
+Replace `your-bucket-name` with the actual name of your bucket.
+
+### 4. Verify access from EC2
+
+The EC2 instance should obtain AWS credentials through its attached IAM role.
+
+Check the identity being used:
+
+```bash
+aws sts get-caller-identity
+```
+
+List the backups stored in S3:
+
+```bash
+aws s3 ls s3://srushti-cloudops-backups-4821/backups/
+```
+
+The identity command should show an assumed-role identity when the instance role is being used.
+
+> For local development in WSL2, use an appropriately permissioned IAM identity. Never use root-account access keys or commit credentials to GitHub.
+
+---
+
+## Testing and Verification
+
+The following checks were performed during project development.
+
+| Test | Verification | Result |
+|---|---|---|
+| Local backup creation | Created a compressed archive from a test directory | Archive created |
+| S3 upload | Listed the configured S3 backup prefix | Uploaded archive appeared |
+| EC2 download | Downloaded the archive using AWS CLI | Archive downloaded |
+| Archive inspection | Ran `tar -tzf` on the downloaded archive | Archive was readable and contained the expected test file |
+| IAM role access | Ran `aws sts get-caller-identity` on EC2 | Confirmed role-based AWS identity |
+| CI validation | Checked GitHub Actions workflow runs | CI and ShellCheck runs passed |
+
+### Example: Download and inspect a backup
+
+```bash
+aws s3 cp \
+  s3://srushti-cloudops-backups-4821/backups/backup-2026-10-08.tar.gz \
+  /tmp/backup-test.tar.gz
+
+tar -tzf /tmp/backup-test.tar.gz
+
+rm -f /tmp/backup-test.tar.gz
+```
+
+The `tar -tzf` command lists the archive contents without extracting them.
+
+**Important:** This verifies that the archive can be read and its contents listed. A complete restoration test would extract the files into a temporary directory and compare them with the originals. Automated restoration testing remains a future improvement.
+
+---
+
+## Continuous Integration
+
+The repository contains GitHub Actions workflows in `.github/workflows/`.
+
+| Workflow | Purpose |
+|---|---|
+| `ci.yml` | Runs the repository validation configured in the workflow |
+| `lint.yml` | Runs ShellCheck on shell scripts |
+
+The workflows are configured for pushes to `main` and pull requests targeting `main`.
+
+A successful workflow indicates that its configured checks passed. It does not guarantee that every script has been functionally tested.
+
+---
+
+## Repository Structure
+
+```text
+cloudops-toolkit/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       └── lint.yml
+├── scripts/
+│   ├── backup.sh
+│   ├── disk-alert.sh
+│   ├── log-analyzer.sh
+│   ├── log-cleaner.sh
+│   ├── memory-alert.sh
+│   └── sysinfo.sh
+├── .gitignore
+└── README.md
+```
+
+### Script descriptions
+
+| Script | Purpose |
+|---|---|
+| `backup.sh` | Creates compressed backups, applies local retention, and optionally uploads archives to S3 |
+| `disk-alert.sh` | Checks disk usage and reports when usage crosses a configured threshold |
+| `memory-alert.sh` | Checks memory usage and reports when usage crosses a configured threshold |
+| `log-cleaner.sh` | Removes or archives old log files according to its configured rules |
+| `log-analyzer.sh` | Analyses log files and reports selected patterns or statistics |
+| `sysinfo.sh` | Displays system information |
+
+The backup script is the primary workflow verified with AWS. The other scripts are included as Linux administration utilities and require further testing before being treated as production-ready tools.
+
+---
+
+## Security Practices
+
+- Use an IAM role for EC2 access instead of storing long-term AWS access keys on the instance.
+- Follow the principle of least privilege when assigning IAM permissions.
+- Keep AWS credentials, private keys, and GitHub tokens out of source code and screenshots.
+- Use a restricted IAM identity for local AWS CLI operations.
+- Keep S3 Block Public Access enabled unless public access is specifically required and reviewed.
+- Restrict inbound network access to the ports and sources required.
+- Check repository history if credentials are ever committed; deleting them from the latest version alone does not remove them from Git history.
+
+---
+
+## Challenges and Lessons Learned
+
+- **Linux permissions:** Learned how executable permissions affect running Bash scripts and how `chmod +x` resolves permission issues.
+- **AWS CLI configuration:** Learned the difference between configuring credentials on a local machine and obtaining temporary credentials through an EC2 IAM role.
+- **Cloud storage:** Implemented an upload and download workflow using Amazon S3.
+- **EC2 administration:** Used a cloud Linux instance to verify a backup archive.
+- **Git and GitHub:** Practised commits, branch management, repository updates, and workflow checks.
+- **CI and ShellCheck:** Used automated checks to catch shell-script issues before relying on the scripts.
+- **IAM security:** Learned why role-based access and least-privilege permissions are important for cloud workloads.
+
+---
+
+## Roadmap
+
+- [x] Create timestamped compressed backups
+- [x] Upload backup archives to Amazon S3
+- [x] Configure an EC2 instance with an IAM role
+- [x] Download and inspect an archive from S3 on EC2
+- [x] Configure GitHub Actions and ShellCheck checks
+- [ ] Add automated tests for backup retention and upload failures
+- [ ] Schedule backups using cron or a systemd timer
+- [ ] Replace `AmazonS3FullAccess` with a least-privilege IAM policy
+- [ ] Configure S3 lifecycle policies for old backups
+- [ ] Add failure notifications, for example using Amazon SNS
+- [ ] Add automated backup restoration tests
+- [ ] Deploy script updates to EC2 through a controlled CI/CD workflow
+- [ ] Manage AWS infrastructure using Terraform
+
+---
+
+## Cost Management and Cleanup
+
+- Stop the EC2 instance when it is not in use. Stopping an instance does not eliminate every possible charge; attached storage and other resources may still incur costs.
+- Delete test backup objects from S3 when they are no longer needed.
+- Review AWS billing and configure an AWS Budget alert.
+- Check for unused resources before finishing a learning session.
+
+---
+
+##  Author
+
+**Srushti Revoor**
+
+Information Science Engineering student | Aspiring Cloud / CloudOps Engineer
+
+[GitHub Profile](https://github.com/srushtirevoor99-beep)
