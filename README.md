@@ -42,31 +42,30 @@ The project demonstrates how local Linux automation can be extended to use cloud
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ```mermaid
 flowchart TD
-    A[Source Files / Test Data] --> B[Bash Backup Script]
-    B --> C[Compressed Backup Archive]
-    C --> D[Local Backup Directory]
-    C -->|AWS CLI Upload| E[(Amazon S3 Bucket)]
-    E -->|AWS CLI Download| F[Amazon EC2 Instance]
-    F --> G[Inspect Archive Using tar]
-    
-    H[GitHub Repository] --> I[GitHub Actions]
-    I --> J[CI Validation]
-    I --> K[ShellCheck]
+    A["Source Files / Test Data"] --> B["Bash Backup Script"]
+    B --> C["Compressed Backup Archive"]
+    C --> D["Local Backup Directory"]
+    C -->|AWS CLI Upload| E[("Amazon S3 Bucket")]
+    E -->|AWS CLI Download| F["Amazon EC2 Instance"]
+    F --> G["Inspect Archive Using tar -tzf"]
+
+    H["GitHub Repository"] --> I["GitHub Actions"]
+    I --> J["CI Validation"]
+    I --> K["ShellCheck"]
 ```
 
 ### How it works
 
-- **Bash** creates the backup archive.
-- **Amazon S3** stores a copy of the archive in the cloud.
-- **Amazon EC2** provides a Linux environment to download and inspect the backup.
-- **AWS IAM** authorizes the EC2 instance to access AWS resources.
-- **AWS Systems Manager** provides browser-based access to the instance.
-- **GitHub Actions** runs automated checks when code changes are pushed or pull requests are opened.
-
+1. **Bash** creates a compressed backup archive from your selected files.
+2. **Local storage** keeps a copy of the archive.
+3. **Amazon S3** stores the backup in the cloud.
+4. **Amazon EC2** downloads the archive and checks its contents.
+5. **IAM** provides the permissions needed for EC2 to access S3.
+6. **GitHub Actions** runs CI validation and ShellCheck to check the code.
 ---
 
 ## Technology Stack
