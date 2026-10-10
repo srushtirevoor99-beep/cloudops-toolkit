@@ -1,4 +1,4 @@
-# ☁️ CloudOps Toolkit
+# CloudOps Toolkit
 
 **Automated backups to Amazon S3 with a fully automated CI/CD pipeline, built with Bash, AWS, and GitHub Actions.**
 
