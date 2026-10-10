@@ -9,14 +9,37 @@ on:
 jobs:
   shellcheck:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Install ShellCheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
-
       - name: Run ShellCheck
         run: |
           find scripts -type f -name "*.sh" -print0 | xargs -0 shellcheck
+
+  test-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Test backup.sh
+        run: |
+          chmod +x scripts/backup.sh
+          mkdir -p /tmp/src && echo hello > /tmp/src/file.txt
+
+          # 1. A normal run creates a valid archive
+          ./scripts/backup.sh /tmp/src /tmp/backups
+          tar -tzf /tmp/backups/backup-*.tar.gz | grep file.txt
+
+          # 2. A missing source folder must fail
+          if ./scripts/backup.sh /tmp/nonexistent /tmp/backups; then
+            echo "Expected failure for missing source"; exit 1
+          fi
+
+          # 3. Retention keeps only the 5 newest archives
+          for d in 01 02 03 04 05 06 07; do
+            touch /tmp/backups/backup-2026-01-$d.tar.gz
+          done
+          ./scripts/backup.sh /tmp/src /tmp/backups
+          test "$(ls /tmp/backups/backup-*.tar.gz | wc -l)" -eq 5
