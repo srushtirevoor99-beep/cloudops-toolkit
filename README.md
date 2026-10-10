@@ -1,7 +1,6 @@
 # ☁️ CloudOps Toolkit
 
 [![CI](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/ci.yml)
-[![ShellCheck](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/lint.yml/badge.svg)](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/lint.yml)
 
 A hands-on CloudOps project that combines **Bash scripting, Linux administration, GitHub Actions, and Amazon Web Services (AWS)** to automate system tasks and implement a cloud-based backup workflow.
 
