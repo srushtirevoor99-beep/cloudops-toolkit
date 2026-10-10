@@ -43,3 +43,34 @@ jobs:
           done
           ./scripts/backup.sh /tmp/src /tmp/backups
           test "$(ls /tmp/backups/backup-*.tar.gz | wc -l)" -eq 5
+
+  deploy:
+    needs: [shellcheck, test-backup]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - name: Deploy via SSM
+        run: |
+          CMD_ID=$(aws ssm send-command \
+            --instance-ids "${{ vars.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=["cd /home/ec2-user/cloudops-toolkit && sudo -u ec2-user git pull origin main"]' \
+            --query "Command.CommandId" --output text)
+
+          aws ssm wait command-executed \
+            --command-id "$CMD_ID" \
+            --instance-id "${{ vars.EC2_INSTANCE_ID }}"
+
+          aws ssm get-command-invocation \
+            --command-id "$CMD_ID" \
+            --instance-id "${{ vars.EC2_INSTANCE_ID }}" \
+            --query "StandardOutputContent" --output text
