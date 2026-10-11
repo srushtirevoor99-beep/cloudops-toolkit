@@ -226,5 +226,6 @@ cloudops-toolkit/
 
 **Srushti Revoor**, Information Science Engineering student and aspiring Cloud / CloudOps engineer.
 
-[GitHub](https://github.com/srushtirevoor99-beep)
+[GitHub](https://github.com/srushtirevoor99-beep) srushti
+
 
