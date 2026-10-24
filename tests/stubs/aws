@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Fake aws CLI for tests. s3://bucket/key maps to $FAKE_S3_DIR/bucket/key.
+# Every call is appended to $FAKE_AWS_LOG. Set FAKE_AWS_FAIL=1 to make every call fail.
+set -eu
+
+echo "aws $*" >>"${FAKE_AWS_LOG:-/dev/null}"
+
+if [[ "${FAKE_AWS_FAIL:-}" == "1" ]]; then
+    echo "fake aws: forced failure" >&2
+    exit 1
+fi
+
+to_local() {
+    if [[ "$1" == s3://* ]]; then
+        echo "$FAKE_S3_DIR/${1#s3://}"
+    else
+        echo "$1"
+    fi
+}
+
+case "$1 $2" in
+"s3 cp")
+    src=$(to_local "$3")
+    dst=$(to_local "$4")
+    if [[ "$dst" == */ ]]; then
+        dst="${dst}$(basename "$src")"
+    fi
+    mkdir -p "$(dirname "$dst")"
+    cp "$src" "$dst"
+    ;;
+"s3 ls")
+    dir=$(to_local "$3")
+    [[ -d "$dir" ]] || exit 1
+    found=1
+    for f in "$dir"*; do
+        [[ -f "$f" ]] || continue
+        found=0
+        printf '2026-01-01 00:00:00 %10d %s\n' "$(wc -c <"$f")" "$(basename "$f")"
+    done
+    exit "$found"
+    ;;
+"sns publish") ;;
+*)
+    echo "fake aws: unsupported command: $*" >&2
+    exit 1
+    ;;
+esac

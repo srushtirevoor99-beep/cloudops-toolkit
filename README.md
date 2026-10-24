@@ -25,9 +25,12 @@ I built it to practise Linux, Bash, Git workflows, core AWS services, and CI/CD,
 - **Compressed, dated backups:** `backup-YYYY-MM-DD.tar.gz`
 - **Optional S3 upload:** set the `BUCKET_NAME` environment variable; without it, the backup stays local
 - **Safe failure handling:** a missing source folder or a failed `tar` stops the script with a non-zero exit code, so an empty archive is never uploaded
-- **Local retention:** keeps only the 5 most recent local backups
+- **Local retention:** keeps only the 5 most recent local backups (change it with `KEEP`)
+- **Encrypted upload:** archives are uploaded with server-side encryption (`--sse AES256`)
+- **Restore with a safety check:** `restore.sh` downloads a backup, confirms the archive is readable, and only then extracts it
+- **Failure alerts:** set `NOTIFY_TOPIC_ARN` and a failed backup publishes a message to an SNS topic
 - **Keyless AWS access:** the EC2 instance uses an IAM role, and GitHub Actions signs in with short-lived OIDC credentials
-- **Automated checks:** ShellCheck linting and functional tests of the backup script on every push and pull request
+- **Automated checks:** ShellCheck linting and a 40+ case [bats](https://github.com/bats-core/bats-core) test suite covering every script, on every push and pull request
 - **Automated deployment:** a successful run on `main` updates the code on EC2 through AWS Systems Manager
 
 ## Architecture
@@ -80,8 +83,8 @@ The workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on e
 
 | Job | What it does |
 |---|---|
-| `shellcheck` | Lints every script in `scripts/` |
-| `test-backup` | Runs `backup.sh` and checks a normal run, a failure on a missing source, and that retention keeps 5 archives |
+| `shellcheck` | Lints every script in `scripts/` and the test stubs in `tests/stubs/` |
+| `test` | Runs the bats suite in `tests/`. A fake `aws` command stands in for AWS, so S3 upload, restore, and SNS alerts are tested without credentials |
 | `deploy` | Runs on `main` after both checks pass: signs in with OIDC, then uses SSM Run Command to pull the latest code onto EC2. The job fails if the remote command fails |
 
 **How the keyless deployment works**
@@ -99,7 +102,7 @@ The workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on e
 
 ### Prerequisites
 
-- Linux, macOS, or WSL2
+- Linux or WSL2 (the scripts use GNU tools and bash 4.4 or newer)
 - [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) (only needed for S3 uploads)
 - An AWS account and an S3 bucket (only needed for S3 uploads)
 
@@ -125,6 +128,24 @@ aws s3 ls s3://$BUCKET_NAME/backups/
 
 On EC2, credentials come from the instance's IAM role, so no `aws configure` step is needed. On a laptop, use an **IAM user's** access key (never the root account) and never commit keys to the repository.
 
+### Restore a backup
+
+```bash
+export BUCKET_NAME=your-bucket-name
+./scripts/restore.sh ~/restored                          # newest backup
+./scripts/restore.sh ~/restored backup-2026-10-24.tar.gz # a specific backup
+```
+
+The script only accepts file names in the form `backup-YYYY-MM-DD.tar.gz`, downloads to a temporary folder, runs `tar -tzf` to confirm the archive is readable, and extracts only after that check passes.
+
+### Get an alert when a backup fails
+
+```bash
+export NOTIFY_TOPIC_ARN=arn:aws:sns:ap-south-1:<account-id>:cloudops-backup-alerts
+```
+
+A missing source folder, a `tar` failure, or a failed upload publishes a message to the topic. The instance role needs `sns:Publish` on that topic (see [`docs/iam/`](docs/iam/)).
+
 ### Schedule it with cron (on EC2)
 
 ```cron
@@ -132,6 +153,21 @@ On EC2, credentials come from the instance's IAM role, so no `aws configure` ste
 ```
 
 The server clock is UTC, so this runs daily at 02:00 UTC (07:30 IST).
+
+The alert scripts exit with status 1 when the threshold is crossed, so cron can react to them:
+
+```cron
+*/15 * * * * /home/ec2-user/cloudops-toolkit/scripts/disk-alert.sh 80 / || logger -t disk-alert "disk usage above 80%"
+*/15 * * * * /home/ec2-user/cloudops-toolkit/scripts/memory-alert.sh 80 || logger -t memory-alert "memory usage above 80%"
+```
+
+### Run the tests
+
+```bash
+sudo apt-get install -y bats shellcheck
+shellcheck scripts/*.sh tests/stubs/*
+bats tests/
+```
 
 ### Verify a backup
 
@@ -149,27 +185,40 @@ cloudops-toolkit/
 │       └── ci.yml
 ├── scripts/
 │   ├── backup.sh
+│   ├── restore.sh
 │   ├── disk-alert.sh
 │   ├── log-analyzer.sh
 │   ├── log-cleaner.sh
 │   ├── memory-alert.sh
 │   └── sysinfo.sh
+├── tests/
+│   ├── stubs/            # fake aws, df and free used by the tests
+│   ├── test_helper.bash
+│   ├── backup.bats
+│   ├── restore.bats
+│   ├── monitoring.bats
+│   └── logs.bats
 ├── docs/
+│   ├── iam/              # least-privilege policies and the OIDC trust policy
+│   ├── s3-lifecycle.json
 │   └── screenshots/
+├── CONTRIBUTING.md
+├── LICENSE
 ├── .gitignore
 └── README.md
 ```
 
-| Script | Purpose | Status |
-|---|---|---|
-| `backup.sh` | Compressed, timestamped backup with local retention and optional S3 upload | Linted, tested in CI, and running on EC2 |
-| `disk-alert.sh` | Warns when disk usage crosses a threshold | Linted |
-| `memory-alert.sh` | Warns when memory usage crosses a threshold | Linted |
-| `log-analyzer.sh` | Log analysis helper | Linted |
-| `log-cleaner.sh` | Log cleanup helper | Linted |
-| `sysinfo.sh` | System information summary | Linted |
+| Script | Usage | Purpose | Status |
+|---|---|---|---|
+| `backup.sh` | `backup.sh <src> <dest>` | Compressed, timestamped backup with local retention, optional encrypted S3 upload, and optional SNS failure alert | Linted, tested in CI, running on EC2 |
+| `restore.sh` | `restore.sh <dest> [file]` | Downloads a backup from S3, verifies it, and extracts it | Linted, tested in CI |
+| `disk-alert.sh` | `disk-alert.sh [threshold] [mount]` | Exit 1 and a warning when disk usage is above the threshold (default 80%) | Linted, tested in CI |
+| `memory-alert.sh` | `memory-alert.sh [threshold]` | Exit 1 and a warning when memory usage is above the threshold (default 80%) | Linted, tested in CI |
+| `log-analyzer.sh` | `log-analyzer.sh <file> [top_n] [pattern]` | Most frequent lines in a log, optionally filtered by a regex | Linted, tested in CI |
+| `log-cleaner.sh` | `log-cleaner.sh <dir> <days> [--dry-run]` | Compresses `.log` files older than N days; `--dry-run` only lists them | Linted, tested in CI |
+| `sysinfo.sh` | `sysinfo.sh` | System information summary | Linted, tested in CI |
 
-> The backup workflow is the part verified end to end. The other scripts pass ShellCheck but do not yet have functional tests.
+All scripts validate their arguments and exit non-zero on bad input, so a mistake in a cron line fails loudly instead of doing the wrong thing.
 
 ## Testing and Verification
 
@@ -181,7 +230,7 @@ cloudops-toolkit/
 | 4 | `aws sts get-caller-identity` on EC2 | Shows the assumed instance role, with no stored keys |
 | 5 | Missing source folder | Script exits with an error and uploads nothing |
 | 6 | Cron tested with a 3-minute schedule, then set to daily | Log shows `Backup saved` and `Uploaded`; S3 timestamp updated |
-| 7 | CI `test-backup` job: normal run, failure case, retention of 5 | Passing in GitHub Actions |
+| 7 | CI `test` job: bats suite for all scripts (backup, restore, alerts, log tools), including failure cases, retention, encrypted upload, SNS alerts, and a backup-then-restore round trip | Passing in GitHub Actions |
 | 8 | CD `deploy` job: push to `main` updates the code on EC2 | Passing in GitHub Actions |
 
 ## Security
@@ -195,7 +244,7 @@ cloudops-toolkit/
 
 **Known limitations**
 
-- The instance role currently uses `AmazonS3FullAccess`. Scoping it to the one bucket is on the roadmap.
+- The instance role currently uses `AmazonS3FullAccess`. A least-privilege policy is ready in [`docs/iam/ec2-s3-backup-policy.json`](docs/iam/ec2-s3-backup-policy.json) and still has to be applied to the role.
 - The nightly job backs up a demo directory, so it is not a production backup policy.
 
 ## Operations and Cost
@@ -218,9 +267,15 @@ cloudops-toolkit/
 - [x] S3 upload and restore verification
 - [x] EC2 instance with an IAM role
 - [x] CI with GitHub Actions and ShellCheck
-- [x] Automated tests for `backup.sh`
+- [x] Automated tests for every script (bats)
 - [x] Scheduled nightly backups with cron
 - [x] Continuous deployment to EC2 with GitHub OIDC and SSM
+- [x] `restore.sh` with archive verification
+- [x] Optional SNS failure alerts and encrypted uploads
+- [ ] Apply the scoped S3 policy to the instance role and remove `AmazonS3FullAccess`
+- [ ] Apply the S3 lifecycle rule in `docs/s3-lifecycle.json` (expire backups after 30 days)
+- [ ] Create the SNS topic and turn on failure alerts on the instance
+- [ ] Manage the EC2 instance, roles, and bucket with Terraform ([aws-terraform-infra](https://github.com/srushtirevoor99-beep/aws-terraform-infra))
 
 ## Author
 

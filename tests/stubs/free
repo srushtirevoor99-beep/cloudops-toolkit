@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Fake free: reports FAKE_MEM_PCT (default 50) percent memory used.
+pct="${FAKE_MEM_PCT:-50}"
+echo "              total        used        free"
+echo "Mem:           1000        $((pct * 10))        $((1000 - pct * 10))"
