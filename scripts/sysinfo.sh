@@ -1,5 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # sysinfo.sh - print basic system information
+set -u
+
 echo "===== System Information ====="
 echo "Hostname : $(hostname)"
 echo "Kernel   : $(uname -r)"

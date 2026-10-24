@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Fake df: reports FAKE_DISK_PCT (default 50) percent usage.
+echo "Filesystem 1K-blocks Used Available Use% Mounted on"
+echo "/dev/fake 1000 ${FAKE_DISK_PCT:-50} 1 ${FAKE_DISK_PCT:-50}% /"
