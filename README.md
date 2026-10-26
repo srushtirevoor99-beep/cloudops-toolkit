@@ -282,11 +282,20 @@ The latest local test run reported **42 passing Bats tests**, and the pull reque
 - Never commit credentials, private keys, or tokens.
 - Use least-privilege IAM policies and review permissions before removing existing access policies.
 
+
 ### Known Limitations
 
 - The project documentation states that the EC2 role still uses `AmazonS3FullAccess`. A narrower policy is available at [`docs/iam/ec2-s3-backup-policy.json`](docs/iam/ec2-s3-backup-policy.json), but it must be applied and tested before removing the broader policy.
 - The scheduled job currently backs up a demo directory; it is not a production backup policy.
 - S3 lifecycle expiration and SNS notifications require the corresponding AWS resources and configuration to be applied. See the roadmap below.
+
+
+### Known Limitations
+
+- The EC2 role is scoped to one bucket and the `backups/` prefix (list, upload and download only), with no `AmazonS3FullAccess`. The policy is in [`docs/iam/ec2-s3-backup-policy.json`](docs/iam/ec2-s3-backup-policy.json), and a backup and restore were tested with it.
+- The scheduled job currently backs up a demo directory; it is not a production backup policy.
+- SNS failure alerts are supported by `backup.sh` but are not enabled on the instance yet. See the roadmap below.
+- The deploy role can run shell commands on one instance. That is narrow, but SSM Run Command is still powerful, so the OIDC trust to the `main` branch matters.
 
 ## Operations and Cost
 
@@ -304,9 +313,23 @@ The latest local test run reported **42 passing Bats tests**, and the pull reque
 - **Avoiding long-lived credentials:** Instance roles and GitHub OIDC provide temporary credentials without storing AWS access keys in the repository.
 
 
+## Roadmap
+
+- [x] Backup script with compression, dated archives, and retention
+- [x] S3 upload and verified restore (`restore.sh`)
+- [x] EC2 instance with an IAM role scoped to one bucket prefix
+- [x] CI with ShellCheck and a bats test suite for every script
+- [x] Scheduled nightly backups with cron
+- [x] Continuous deployment to EC2 with GitHub OIDC and SSM
+- [x] S3 lifecycle rule: backups expire after 30 days
+- [ ] Turn on SNS failure alerts on the instance
+- [ ] Manage the EC2 instance, roles and bucket with Terraform ([aws-terraform-infra](https://github.com/srushtirevoor99-beep/aws-terraform-infra))
+- [ ] Containerise the toolkit and run it as a scheduled task
+
 ## Author
 
 **Srushti Revoor**
+
 Information Science Engineering student | Aspiring Cloud / CloudOps Engineer
 
 - [GitHub profile](https://github.com/srushtirevoor99-beep)
