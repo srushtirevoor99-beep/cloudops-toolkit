@@ -1,182 +1,216 @@
 # CloudOps Toolkit
 
-**Automated backups to Amazon S3 with a fully automated CI/CD pipeline, built with Bash, AWS, and GitHub Actions.**
+Automated Linux operations and AWS backups using **Bash, Amazon S3, EC2, and GitHub Actions**.
 
 [![CI](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/srushtirevoor99-beep/cloudops-toolkit/actions/workflows/ci.yml)
 ![Bash](https://img.shields.io/badge/Bash-scripts-4EAA25?logo=gnubash&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-EC2%20%7C%20S3%20%7C%20IAM%20%7C%20SSM-FF9900?logo=amazonwebservices&logoColor=white)
 ![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?logo=githubactions&logoColor=white)
 
----
-
 ## Overview
 
-The CloudOps Toolkit is a collection of Bash scripts for Linux administration and cloud operations. Its main workflow is a reliable backup pipeline:
+CloudOps Toolkit is a collection of Bash scripts for Linux administration and cloud operations. Its primary workflow creates timestamped, compressed backups, optionally uploads them to Amazon S3, and schedules them to run on an EC2 instance.
 
-1. Archive a folder into a timestamped `.tar.gz` file.
-2. Upload the archive to **Amazon S3**.
-3. Run it nightly on an **EC2** instance with **cron**.
-4. Deploy every change to that instance automatically through **GitHub Actions**, without storing AWS keys anywhere.
-
-I built it to practise Linux, Bash, Git workflows, core AWS services, and CI/CD, and I documented each step with evidence.
+The project also demonstrates automated testing, static analysis, and deployment through GitHub Actions. Deployment uses GitHub's OpenID Connect (OIDC) integration and AWS Systems Manager (SSM), avoiding long-lived AWS access keys in the repository.
 
 ## Features
 
-- **Compressed, dated backups:** `backup-YYYY-MM-DD.tar.gz`
-- **Optional S3 upload:** set the `BUCKET_NAME` environment variable; without it, the backup stays local
-- **Safe failure handling:** a missing source folder or a failed `tar` stops the script with a non-zero exit code, so an empty archive is never uploaded
-- **Local retention:** keeps only the 5 most recent local backups (change it with `KEEP`)
-- **Encrypted upload:** archives are uploaded with server-side encryption (`--sse AES256`)
-- **Restore with a safety check:** `restore.sh` downloads a backup, confirms the archive is readable, and only then extracts it
-- **Failure alerts:** set `NOTIFY_TOPIC_ARN` and a failed backup publishes a message to an SNS topic
-- **Keyless AWS access:** the EC2 instance uses an IAM role, and GitHub Actions signs in with short-lived OIDC credentials
-- **Automated checks:** ShellCheck linting and a 40+ case [bats](https://github.com/bats-core/bats-core) test suite covering every script, on every push and pull request
-- **Automated deployment:** a successful run on `main` updates the code on EC2 through AWS Systems Manager
+- **Timestamped backups:** Create compressed `.tar.gz` archives.
+- **Optional S3 uploads:** Set `BUCKET_NAME` to upload backups; without it, backups remain local.
+- **Failure handling:** Validate the source directory, check archive creation, and stop on failures to avoid uploading an invalid or empty archive.
+- **Local retention:** Keep the five most recent local backups by default; configure the count with `KEEP`.
+- **Encrypted uploads:** Use S3 server-side encryption with `AES256`.
+- **Restore verification:** Download a selected backup, verify that the archive is readable, and extract only after verification.
+- **Optional SNS alerts:** Set `NOTIFY_TOPIC_ARN` to publish a notification when a backup fails.
+- **Keyless CI/CD authentication:** GitHub Actions uses short-lived OIDC credentials; EC2 uses its attached IAM role.
+- **Automated checks:** Run ShellCheck and a Bats test suite on pushes and pull requests.
+- **Automated deployment:** After the required checks pass on `main`, GitHub Actions deploys updates to EC2 through SSM.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A["Push to main"] --> B["GitHub Actions"]
-    B --> C["ShellCheck + backup tests"]
-    C --> D["Deploy job"]
-    D -->|"OIDC: temporary credentials"| E["IAM role: github-actions-deploy"]
-    E -->|"SSM Run Command"| F["EC2: pull latest scripts"]
-    F --> G["cron: nightly backup.sh"]
-    G -->|"aws s3 cp via instance role"| H[("Amazon S3")]
+    A["Push or pull request"] --> B["GitHub Actions"]
+    B --> C["ShellCheck + Bats tests"]
+    C --> D["Deploy job on main"]
+    D -->|"OIDC: short-lived credentials"| E["IAM role: github-actions-deploy"]
+    E -->|"SSM Run Command"| F["EC2 instance"]
+    F --> G["cron: scheduled backup.sh"]
+    G -->|"AWS CLI + instance role"| H[("Amazon S3")]
 ```
 
-**Summary:** a push to `main` is checked by GitHub Actions, then deployed to EC2 without any stored AWS keys. On the server, cron runs `backup.sh` every night and uploads the archive to S3.
+A push or pull request triggers automated checks. When changes reach `main` and the required checks pass, the deployment job uses OIDC to obtain temporary AWS credentials and SSM to update the EC2 instance. A cron job on the instance runs the backup script on its configured schedule.
 
-## Tech Stack
+## Technology Stack
 
 | Technology | Purpose |
 |---|---|
-| Bash | Backup automation and utility scripts |
-| Linux (Ubuntu on WSL2, Amazon Linux 2023 on EC2) | Development and server environment |
-| Amazon EC2 | Server that runs the scheduled backups |
-| Amazon S3 | Off-server backup storage |
-| AWS IAM | Roles and least-privilege-style access for EC2 and GitHub |
-| AWS Systems Manager | Remote deployment and browser-based access without SSH |
+| Bash | Backup automation and Linux utility scripts |
+| Ubuntu on WSL2 / Amazon Linux 2023 | Development and EC2 environments |
+| Amazon EC2 | Runs scheduled operations |
+| Amazon S3 | Off-instance backup storage |
+| AWS IAM | Controls permissions for EC2 and GitHub Actions |
+| AWS Systems Manager | Remote command execution and deployment without SSH-based deployment |
 | GitHub Actions + OIDC | CI/CD with short-lived AWS credentials |
-| ShellCheck | Static analysis of the shell scripts |
-| cron | Nightly scheduling on the EC2 instance |
+| ShellCheck | Static analysis for shell scripts |
+| Bats | Automated shell-script tests |
+| cron | Scheduled backups and monitoring checks |
 | Git and GitHub | Version control, branches, and pull requests |
 
-## AWS Infrastructure
+## AWS Environment
 
-| Resource | Details |
+The project README currently documents the following setup. Update these details if your deployed resources change.
+
+| Resource | Documented configuration |
 |---|---|
 | Region | Asia Pacific (Mumbai), `ap-south-1` |
 | EC2 instance | `cloudops-backup-server`, `t3.micro`, Amazon Linux 2023 |
 | Instance access | Systems Manager Session Manager and EC2 Instance Connect |
-| S3 bucket | `srushti-cloudops-backups-4821`, backups under `backups/` |
-| Instance role | `cloudops-ec2-s3-role`, gives the instance temporary S3 access |
-| Deploy role | `github-actions-deploy`, assumed by GitHub Actions through OIDC |
-| Deploy policy | `github-deploy-ssm`, allows running shell commands on this one instance only |
+| S3 bucket | `srushti-cloudops-backups-4821`, with backups under `backups/` |
+| EC2 instance role | `cloudops-ec2-s3-role` |
+| GitHub Actions deployment role | `github-actions-deploy` |
+| Deployment policy | `github-deploy-ssm`, scoped to the intended instance |
 
 ## CI/CD Pipeline
 
+Workflow file: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
+
 ![CI/CD pipeline run](docs/screenshots/ci-cd-pipeline.png)
 
-The workflow in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and pull request to `main`:
-
-| Job | What it does |
+| Job | Responsibility |
 |---|---|
-| `shellcheck` | Lints every script in `scripts/` and the test stubs in `tests/stubs/` |
-| `test` | Runs the bats suite in `tests/`. A fake `aws` command stands in for AWS, so S3 upload, restore, and SNS alerts are tested without credentials |
-| `deploy` | Runs on `main` after both checks pass: signs in with OIDC, then uses SSM Run Command to pull the latest code onto EC2. The job fails if the remote command fails |
+| `shellcheck` | Lints scripts in `scripts/` and test stubs in `tests/stubs/`. |
+| `test` | Runs the Bats suite. Fake AWS commands let tests exercise S3, restore, and SNS paths without using live AWS credentials. |
+| `deploy` | Runs on `main` after the required checks pass. It authenticates with OIDC and uses SSM Run Command to update the EC2 instance. |
 
-**How the keyless deployment works**
+### How Keyless Deployment Works
 
-| Component | Setup |
+| Component | Configuration |
 |---|---|
-| OIDC identity provider | `token.actions.githubusercontent.com` |
-| IAM role trust | Only this repository's `main` branch can assume `github-actions-deploy` |
-| IAM permissions | `ssm:SendCommand` on the `AWS-RunShellScript` document and this single instance, plus read access to command status |
-| GitHub configuration | Repository variables `AWS_ROLE_ARN` and `EC2_INSTANCE_ID`; no access keys or secrets |
+| OIDC provider | `token.actions.githubusercontent.com` |
+| IAM trust policy | Intended to allow this repository's `main` branch to assume `github-actions-deploy` |
+| IAM permissions | SSM command execution for the intended instance, plus permission to check command status |
+| GitHub repository variables | `AWS_ROLE_ARN` and `EC2_INSTANCE_ID`; no long-lived AWS access keys are required for this workflow |
 
-> **Note:** the EC2 instance must be running and *Online* in Systems Manager. If it is stopped, the deploy job fails with `InvalidInstanceId`.
+> **Deployment prerequisite:** The EC2 instance must be running and show as **Online** in Systems Manager. Otherwise, the deployment may fail with `InvalidInstanceId`.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Linux or WSL2 (the scripts use GNU tools and bash 4.4 or newer)
-- [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) (only needed for S3 uploads)
-- An AWS account and an S3 bucket (only needed for S3 uploads)
+- Linux or WSL2 with Bash 4.4 or newer and GNU utilities.
+- Git.
+- AWS CLI v2, if you plan to upload to S3 or inspect S3 backups.
+- An AWS account and an S3 bucket for cloud backup workflows.
+- Appropriate AWS permissions for the operations you run.
 
-### Run a local backup
+### Clone the Repository
 
 ```bash
 git clone https://github.com/srushtirevoor99-beep/cloudops-toolkit.git
 cd cloudops-toolkit
 chmod +x scripts/*.sh
+```
 
+### Create a Local Backup
+
+The backup script accepts a source directory and a destination directory:
+
+```bash
 ./scripts/backup.sh <source_dir> <dest_dir>
-# example
+```
+
+Example:
+
+```bash
+mkdir -p ~/testdata
+echo "CloudOps backup test" > ~/testdata/example.txt
 ./scripts/backup.sh ~/testdata ~/testbackups
 ```
 
-### Back up and upload to S3
+### Upload a Backup to S3
+
+Set the bucket name before running the backup:
 
 ```bash
 export BUCKET_NAME=your-bucket-name
 ./scripts/backup.sh ~/testdata ~/testbackups
-aws s3 ls s3://$BUCKET_NAME/backups/
+aws s3 ls "s3://$BUCKET_NAME/backups/"
 ```
 
-On EC2, credentials come from the instance's IAM role, so no `aws configure` step is needed. On a laptop, use an **IAM user's** access key (never the root account) and never commit keys to the repository.
+On EC2, the AWS CLI should obtain temporary credentials from the instance role. On a development machine, use an appropriately scoped identity; do not use root-account access keys or commit credentials to the repository.
 
-### Restore a backup
+### Restore a Backup
+
+Set `BUCKET_NAME`, then specify the destination directory. To restore a specific archive, provide its filename:
 
 ```bash
 export BUCKET_NAME=your-bucket-name
-./scripts/restore.sh ~/restored                          # newest backup
-./scripts/restore.sh ~/restored backup-2026-10-24.tar.gz # a specific backup
+
+# Restore the newest available backup
+./scripts/restore.sh ~/restored
+
+# Restore a specific backup
+./scripts/restore.sh ~/restored backup-2026-10-24.tar.gz
 ```
 
-The script only accepts file names in the form `backup-YYYY-MM-DD.tar.gz`, downloads to a temporary folder, runs `tar -tzf` to confirm the archive is readable, and extracts only after that check passes.
+The script is documented to accept filenames matching `backup-YYYY-MM-DD.tar.gz`, download the archive to a temporary directory, check it with `tar -tzf`, and extract only after the readability check passes.
 
-### Get an alert when a backup fails
+### Configure Failure Notifications
+
+Set the SNS topic ARN if you have created and configured a topic:
 
 ```bash
 export NOTIFY_TOPIC_ARN=arn:aws:sns:ap-south-1:<account-id>:cloudops-backup-alerts
 ```
 
-A missing source folder, a `tar` failure, or a failed upload publishes a message to the topic. The instance role needs `sns:Publish` on that topic (see [`docs/iam/`](docs/iam/)).
+The documented failure paths include a missing source directory, a `tar` failure, or an upload failure. The EC2 role needs permission to publish to the configured topic. See [`docs/iam/`](docs/iam/).
 
-### Schedule it with cron (on EC2)
+### Schedule Backups with cron
+
+Example cron entry for an EC2 user named `ec2-user`:
 
 ```cron
 0 2 * * * BUCKET_NAME=<your-bucket> /home/ec2-user/cloudops-toolkit/scripts/backup.sh <source_dir> /home/ec2-user/local-backup >> /home/ec2-user/backup.log 2>&1
 ```
 
-The server clock is UTC, so this runs daily at 02:00 UTC (07:30 IST).
+The README's documented server clock is UTC, so `02:00 UTC` corresponds to `07:30 IST`.
 
-The alert scripts exit with status 1 when the threshold is crossed, so cron can react to them:
+Example monitoring entries that log threshold violations:
 
 ```cron
 */15 * * * * /home/ec2-user/cloudops-toolkit/scripts/disk-alert.sh 80 / || logger -t disk-alert "disk usage above 80%"
 */15 * * * * /home/ec2-user/cloudops-toolkit/scripts/memory-alert.sh 80 || logger -t memory-alert "memory usage above 80%"
 ```
 
-### Run the tests
+Confirm the paths and script behavior on your instance before installing cron entries.
+
+### Run the Automated Checks
+
+On Ubuntu or WSL2, install the tools if needed:
 
 ```bash
+sudo apt-get update
 sudo apt-get install -y bats shellcheck
+```
+
+Then run:
+
+```bash
 shellcheck scripts/*.sh tests/stubs/*
 bats tests/
 ```
 
-### Verify a backup
+### Verify a Backup Archive
+
+Download a backup and inspect its contents:
 
 ```bash
 aws s3 cp s3://<your-bucket>/backups/backup-YYYY-MM-DD.tar.gz /tmp/backup-test.tar.gz
 tar -tzf /tmp/backup-test.tar.gz
 ```
 
-## Scripts
+## Repository Structure
 
 ```text
 cloudops-toolkit/
@@ -192,14 +226,14 @@ cloudops-toolkit/
 │   ├── memory-alert.sh
 │   └── sysinfo.sh
 ├── tests/
-│   ├── stubs/            # fake aws, df and free used by the tests
+│   ├── stubs/             # Fake commands used by tests
 │   ├── test_helper.bash
 │   ├── backup.bats
 │   ├── restore.bats
 │   ├── monitoring.bats
 │   └── logs.bats
 ├── docs/
-│   ├── iam/              # least-privilege policies and the OIDC trust policy
+│   ├── iam/
 │   ├── s3-lifecycle.json
 │   └── screenshots/
 ├── CONTRIBUTING.md
@@ -208,79 +242,72 @@ cloudops-toolkit/
 └── README.md
 ```
 
-| Script | Usage | Purpose | Status |
-|---|---|---|---|
-| `backup.sh` | `backup.sh <src> <dest>` | Compressed, timestamped backup with local retention, optional encrypted S3 upload, and optional SNS failure alert | Linted, tested in CI, running on EC2 |
-| `restore.sh` | `restore.sh <dest> [file]` | Downloads a backup from S3, verifies it, and extracts it | Linted, tested in CI |
-| `disk-alert.sh` | `disk-alert.sh [threshold] [mount]` | Exit 1 and a warning when disk usage is above the threshold (default 80%) | Linted, tested in CI |
-| `memory-alert.sh` | `memory-alert.sh [threshold]` | Exit 1 and a warning when memory usage is above the threshold (default 80%) | Linted, tested in CI |
-| `log-analyzer.sh` | `log-analyzer.sh <file> [top_n] [pattern]` | Most frequent lines in a log, optionally filtered by a regex | Linted, tested in CI |
-| `log-cleaner.sh` | `log-cleaner.sh <dir> <days> [--dry-run]` | Compresses `.log` files older than N days; `--dry-run` only lists them | Linted, tested in CI |
-| `sysinfo.sh` | `sysinfo.sh` | System information summary | Linted, tested in CI |
+## Script Reference
 
-All scripts validate their arguments and exit non-zero on bad input, so a mistake in a cron line fails loudly instead of doing the wrong thing.
+| Script | Usage | Purpose |
+|---|---|---|
+| `backup.sh` | `backup.sh <src> <dest>` | Creates a timestamped compressed archive, applies local retention, and optionally uploads to S3 and sends an SNS failure alert. |
+| `restore.sh` | `restore.sh <dest> [file]` | Downloads a backup from S3, verifies archive readability, and extracts it. |
+| `disk-alert.sh` | `disk-alert.sh [threshold] [mount]` | Reports disk usage and exits non-zero when usage exceeds the threshold (default: 80%). |
+| `memory-alert.sh` | `memory-alert.sh [threshold]` | Reports memory usage and exits non-zero when memory usage exceeds the threshold (default: 80%). |
+| `log-analyzer.sh` | `log-analyzer.sh <file> [top_n] [pattern]` | Lists frequent log lines, optionally filtered by a regular expression. |
+| `log-cleaner.sh` | `log-cleaner.sh <dir> <days> [--dry-run]` | Compresses `.log` files older than the specified number of days; `--dry-run` lists candidates without changing them. |
+| `sysinfo.sh` | `sysinfo.sh` | Prints a system information summary. |
+
+Scripts are intended to validate arguments and return non-zero status codes for invalid input or failed operations. Check each script's usage output and tests for exact behavior.
 
 ## Testing and Verification
 
-| # | Check | Result |
-|---|---|---|
-| 1 | Local backup created from a test folder (WSL2) | `.tar.gz` archive created |
-| 2 | Upload to S3, verified with `aws s3 ls` | Archive listed in the bucket |
-| 3 | Download on EC2 and inspect with `tar -tzf` | Archive readable and contains the test data |
-| 4 | `aws sts get-caller-identity` on EC2 | Shows the assumed instance role, with no stored keys |
-| 5 | Missing source folder | Script exits with an error and uploads nothing |
-| 6 | Cron tested with a 3-minute schedule, then set to daily | Log shows `Backup saved` and `Uploaded`; S3 timestamp updated |
-| 7 | CI `test` job: bats suite for all scripts (backup, restore, alerts, log tools), including failure cases, retention, encrypted upload, SNS alerts, and a backup-then-restore round trip | Passing in GitHub Actions |
-| 8 | CD `deploy` job: push to `main` updates the code on EC2 | Passing in GitHub Actions |
+The project documentation records the following checks. Treat these as project-reported results and keep them current as the infrastructure or workflow changes.
 
-## Security
+| Check | Documented result |
+|---|---|
+| Local backup from a test folder on WSL2 | A `.tar.gz` archive was created |
+| S3 upload | The archive appeared in the bucket listing |
+| Archive download and inspection on EC2 | The archive was readable and contained test data |
+| `aws sts get-caller-identity` on EC2 | Returned the assumed instance role |
+| Missing source directory | The script exited with an error and did not upload an archive |
+| Cron test | A short-interval test was followed by a daily schedule; logs showed backup/upload messages |
+| CI test job | The Bats suite covers backup, restore, alerts, log tools, and failure scenarios |
+| CI deployment job | The documented workflow deploys updates to EC2 through SSM |
 
-- IAM roles instead of stored access keys on EC2
-- GitHub Actions authenticates through OIDC with short-lived credentials, so no AWS keys live in the repository or in GitHub secrets
-- The deploy role can only be assumed from this repository's `main` branch and can only run commands on one instance
-- Daily AWS CLI use through an IAM user rather than the root account, with MFA enabled on the root account
-- New S3 bucket with the default Block Public Access protections
-- No credentials, private keys, or tokens in the repository
+The latest local test run reported **42 passing Bats tests**, and the pull request screenshot showed **3 of 3 checks passing**. Re-check GitHub Actions for the latest result before relying on that status.
 
-**Known limitations**
+## Security Considerations
 
-- The instance role currently uses `AmazonS3FullAccess`. A least-privilege policy is ready in [`docs/iam/ec2-s3-backup-policy.json`](docs/iam/ec2-s3-backup-policy.json) and still has to be applied to the role.
-- The nightly job backs up a demo directory, so it is not a production backup policy.
+- Use an EC2 instance role rather than stored access keys on the server.
+- Use GitHub OIDC for short-lived deployment credentials.
+- Restrict the deployment role to the intended repository branch, SSM operations, and target instance.
+- Keep the S3 bucket's Block Public Access settings enabled unless there is a deliberate, reviewed reason to change them.
+- Never commit credentials, private keys, or tokens.
+- Use least-privilege IAM policies and review permissions before removing existing access policies.
+
+### Known Limitations
+
+- The project documentation states that the EC2 role still uses `AmazonS3FullAccess`. A narrower policy is available at [`docs/iam/ec2-s3-backup-policy.json`](docs/iam/ec2-s3-backup-policy.json), but it must be applied and tested before removing the broader policy.
+- The scheduled job currently backs up a demo directory; it is not a production backup policy.
+- S3 lifecycle expiration and SNS notifications require the corresponding AWS resources and configuration to be applied. See the roadmap below.
 
 ## Operations and Cost
 
-- The instance is stopped when not in use to avoid charges. Scheduled backups and deployments only work while it is running.
-- Before pushing to `main`, start the instance and wait until it shows *Online* in Systems Manager.
-- Delete test backups from S3 when finished, and keep an AWS Budget alert enabled.
+- Stop the EC2 instance when it is not needed to reduce compute charges. Scheduled backups and deployments will not run as expected while the instance is stopped.
+- Before pushing changes to `main`, confirm the instance is running and **Online** in Systems Manager if the deployment workflow targets it.
+- Review S3 storage and request costs; remove test backups when they are no longer needed.
+- Keep an AWS Budget alert enabled and review the cost impact before approving infrastructure changes.
 
-## Challenges and Lessons
+## Challenges and Lessons Learned
 
-- **A failing backup uploaded an empty archive.** Reading the cron log showed `tar` failing on a missing folder while the script still reported success and uploaded a tiny file. I fixed it by validating the source, checking `tar`'s exit status, and removing partial archives, then added a CI test so the failure case is covered.
-- **A commit landed on `main` instead of a feature branch.** I moved it to the right branch and reset `main` to match `origin/main`, then merged it through a pull request.
-- **The first deploy attempt failed with `InvalidInstanceId`.** Systems Manager could not target the instance, and the run passed once the instance was available. I documented the requirement and added a failure check so the workflow reports remote errors.
-- **`Permission denied` on a new script.** The file was missing its executable bit, which `chmod +x` fixed.
-- **Why roles beat keys.** Instance roles and OIDC give temporary credentials automatically, so there is nothing to leak or rotate.
+- **Preventing empty archives:** A failed `tar` command had previously allowed an empty archive to be uploaded. The fix validates the source, checks the command's exit status, removes partial archives, and tests the failure path.
+- **Using feature branches and pull requests:** Changes are developed and reviewed through branches rather than being committed directly to `main`.
+- **Diagnosing `InvalidInstanceId`:** Systems Manager must be able to target the EC2 instance; checking its managed-node status helps diagnose deployment failures.
+- **Fixing executable permissions:** Newly added scripts may need `chmod +x` before they can be run directly.
+- **Avoiding long-lived credentials:** Instance roles and GitHub OIDC provide temporary credentials without storing AWS access keys in the repository.
 
-## Roadmap
-
-- [x] Backup script with compression, dated archives, and retention
-- [x] S3 upload and restore verification
-- [x] EC2 instance with an IAM role
-- [x] CI with GitHub Actions and ShellCheck
-- [x] Automated tests for every script (bats)
-- [x] Scheduled nightly backups with cron
-- [x] Continuous deployment to EC2 with GitHub OIDC and SSM
-- [x] `restore.sh` with archive verification
-- [x] Optional SNS failure alerts and encrypted uploads
-- [ ] Apply the scoped S3 policy to the instance role and remove `AmazonS3FullAccess`
-- [ ] Apply the S3 lifecycle rule in `docs/s3-lifecycle.json` (expire backups after 30 days)
-- [ ] Create the SNS topic and turn on failure alerts on the instance
-- [ ] Manage the EC2 instance, roles, and bucket with Terraform ([aws-terraform-infra](https://github.com/srushtirevoor99-beep/aws-terraform-infra))
 
 ## Author
 
-**Srushti Revoor**, Information Science Engineering student and aspiring Cloud / CloudOps engineer.
+**Srushti Revoor**
+Information Science Engineering student | Aspiring Cloud / CloudOps Engineer
 
-[GitHub](https://github.com/srushtirevoor99-beep) 
-
-
+- [GitHub profile](https://github.com/srushtirevoor99-beep)
+- [CloudOps Toolkit repository](https://github.com/srushtirevoor99-beep/cloudops-toolkit)
