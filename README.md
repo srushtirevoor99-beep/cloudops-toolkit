@@ -197,7 +197,7 @@ sudo apt-get install -y bats shellcheck
 Then run:
 
 ```bash
-shellcheck scripts/*.sh tests/*.sh   # what CI runs; add tests/stubs/* to lint the stubs too
+shellcheck scripts/*.sh tests/*.sh tests/stubs/*
 bats tests/
 ```
 
