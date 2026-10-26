@@ -282,13 +282,21 @@ The latest local test run reported **42 passing Bats tests**, and the pull reque
 - Never commit credentials, private keys, or tokens.
 - Use least-privilege IAM policies and review permissions before removing existing access policies.
 
+
+### Known Limitations
+
+- The project documentation states that the EC2 role still uses `AmazonS3FullAccess`. A narrower policy is available at [`docs/iam/ec2-s3-backup-policy.json`](docs/iam/ec2-s3-backup-policy.json), but it must be applied and tested before removing the broader policy.
+- The scheduled job currently backs up a demo directory; it is not a production backup policy.
+- S3 lifecycle expiration and SNS notifications require the corresponding AWS resources and configuration to be applied. See the roadmap below.
+
+
 ### Known Limitations
 
 - The EC2 role is scoped to one bucket and the `backups/` prefix (list, upload and download only), with no `AmazonS3FullAccess`. The policy is in [`docs/iam/ec2-s3-backup-policy.json`](docs/iam/ec2-s3-backup-policy.json), and a backup and restore were tested with it.
 - The scheduled job currently backs up a demo directory; it is not a production backup policy.
 - SNS failure alerts are supported by `backup.sh` but are not enabled on the instance yet. See the roadmap below.
 - The deploy role can run shell commands on one instance. That is narrow, but SSM Run Command is still powerful, so the OIDC trust to the `main` branch matters.
-  
+
 ## Operations and Cost
 
 - Stop the EC2 instance when it is not needed to reduce compute charges. Scheduled backups and deployments will not run as expected while the instance is stopped.
@@ -303,6 +311,7 @@ The latest local test run reported **42 passing Bats tests**, and the pull reque
 - **Diagnosing `InvalidInstanceId`:** Systems Manager must be able to target the EC2 instance; checking its managed-node status helps diagnose deployment failures.
 - **Fixing executable permissions:** Newly added scripts may need `chmod +x` before they can be run directly.
 - **Avoiding long-lived credentials:** Instance roles and GitHub OIDC provide temporary credentials without storing AWS access keys in the repository.
+
 
 ## Roadmap
 
@@ -319,7 +328,8 @@ The latest local test run reported **42 passing Bats tests**, and the pull reque
 
 ## Author
 
-**Srushti Revoor**  
+**Srushti Revoor**
+
 Information Science Engineering student | Aspiring Cloud / CloudOps Engineer
 
 - [GitHub profile](https://github.com/srushtirevoor99-beep)
