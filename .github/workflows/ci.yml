@@ -19,8 +19,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: Run ShellCheck
         run: |
-          find scripts tests/stubs tests -type f -name '*.sh' -print0 | xargs -0 -r shellcheck
-
+          { find scripts tests -type f -name '*.sh'; find tests/stubs -type f; } | xargs -r shellcheck
   test:
     runs-on: ubuntu-latest
     steps:
