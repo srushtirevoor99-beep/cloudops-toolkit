@@ -79,7 +79,7 @@ Workflow file: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
 | Job | Responsibility |
 |---|---|
-| `shellcheck` | Lints all `*.sh` files under `scripts/`, `tests/`, and `tests/stubs/`. |
+| `shellcheck` | Lints every `*.sh` file under `scripts/` and `tests/`, plus the test stubs in `tests/stubs/`. |
 | `test` | Runs the Bats suite. Fake AWS commands let tests exercise S3, restore, and SNS paths without using live AWS credentials. |
 | `deploy` | Runs on `main` after the required checks pass. It authenticates with OIDC and uses SSM Run Command to run `git pull --ff-only origin main` on the EC2 instance. It then waits for the command, prints its status, and fails the job (showing the command's stderr) if the status is not `Success`. |
 
