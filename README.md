@@ -79,9 +79,9 @@ Workflow file: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 
 | Job | Responsibility |
 |---|---|
-| `shellcheck` | Lints scripts in `scripts/` and test stubs in `tests/stubs/`. |
+| `shellcheck` | Lints all `*.sh` files under `scripts/`, `tests/`, and `tests/stubs/`. |
 | `test` | Runs the Bats suite. Fake AWS commands let tests exercise S3, restore, and SNS paths without using live AWS credentials. |
-| `deploy` | Runs on `main` after the required checks pass. It authenticates with OIDC and uses SSM Run Command to update the EC2 instance. |
+| `deploy` | Runs on `main` after the required checks pass. It authenticates with OIDC and uses SSM Run Command to run `git pull --ff-only origin main` on the EC2 instance. It then waits for the command, prints its status, and fails the job (showing the command's stderr) if the status is not `Success`. |
 
 ### How Keyless Deployment Works
 
@@ -197,7 +197,7 @@ sudo apt-get install -y bats shellcheck
 Then run:
 
 ```bash
-shellcheck scripts/*.sh tests/stubs/*
+shellcheck scripts/*.sh tests/*.sh   # what CI runs; add tests/stubs/* to lint the stubs too
 bats tests/
 ```
 
@@ -282,14 +282,6 @@ The latest local test run reported **42 passing Bats tests**, and the pull reque
 - Never commit credentials, private keys, or tokens.
 - Use least-privilege IAM policies and review permissions before removing existing access policies.
 
-
-### Known Limitations
-
-- The project documentation states that the EC2 role still uses `AmazonS3FullAccess`. A narrower policy is available at [`docs/iam/ec2-s3-backup-policy.json`](docs/iam/ec2-s3-backup-policy.json), but it must be applied and tested before removing the broader policy.
-- The scheduled job currently backs up a demo directory; it is not a production backup policy.
-- S3 lifecycle expiration and SNS notifications require the corresponding AWS resources and configuration to be applied. See the roadmap below.
-
-
 ### Known Limitations
 
 - The EC2 role is scoped to one bucket and the `backups/` prefix (list, upload and download only), with no `AmazonS3FullAccess`. The policy is in [`docs/iam/ec2-s3-backup-policy.json`](docs/iam/ec2-s3-backup-policy.json), and a backup and restore were tested with it.
@@ -311,7 +303,6 @@ The latest local test run reported **42 passing Bats tests**, and the pull reque
 - **Diagnosing `InvalidInstanceId`:** Systems Manager must be able to target the EC2 instance; checking its managed-node status helps diagnose deployment failures.
 - **Fixing executable permissions:** Newly added scripts may need `chmod +x` before they can be run directly.
 - **Avoiding long-lived credentials:** Instance roles and GitHub OIDC provide temporary credentials without storing AWS access keys in the repository.
-
 
 ## Roadmap
 
