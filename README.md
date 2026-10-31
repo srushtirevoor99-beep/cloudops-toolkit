@@ -299,7 +299,7 @@ The project documentation records the following checks. Treat these as project-r
 | CI test job | The Bats suite covers backup, restore, alerts, log tools, and failure scenarios |
 | CI deployment job | The documented workflow deploys updates to EC2 through SSM |
 
-The latest local test run reported **42 passing Bats tests**, and the pull request screenshot showed **3 of 3 checks passing**. Re-check GitHub Actions for the latest result before relying on that status.
+The latest local test run reported **44 passing Bats tests**, and the pull request screenshot showed **3 of 3 checks passing**. Re-check GitHub Actions for the latest result before relying on that status.
 
 ## Security Considerations
 
@@ -327,6 +327,7 @@ The latest local test run reported **42 passing Bats tests**, and the pull reque
 ## Challenges and Lessons Learned
 
 - **Preventing empty archives:** A failed `tar` command had previously allowed an empty archive to be uploaded. The fix validates the source, checks the command's exit status, removes partial archives, and tests the failure path.
+- **Refusing empty backups:** A mistyped folder path in a Docker volume mount backed up an empty directory and reported success. Because the retention step deletes older archives, repeated empty backups could have pushed out good ones. `backup.sh` now fails on an empty source, and two tests cover it.
 - **Using feature branches and pull requests:** Changes are developed and reviewed through branches rather than being committed directly to `main`.
 - **Diagnosing `InvalidInstanceId`:** Systems Manager must be able to target the EC2 instance; checking its managed-node status helps diagnose deployment failures.
 - **Fixing executable permissions:** Newly added scripts may need `chmod +x` before they can be run directly.

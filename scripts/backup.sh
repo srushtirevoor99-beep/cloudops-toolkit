@@ -41,6 +41,13 @@ if [[ ! -d "$SOURCE" ]]; then
     exit 1
 fi
 
+# An empty source would produce an empty archive, and the retention step below
+# would then push older, good backups out. Refuse instead.
+if [[ -z "$(find "$SOURCE" -mindepth 1 -print -quit)" ]]; then
+    notify_failure "Error: source '$SOURCE' is empty, nothing to back up"
+    exit 1
+fi
+
 mkdir -p "$DEST"
 ARCHIVE="$DEST/backup-$DATE.tar.gz"
 
