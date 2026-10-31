@@ -30,8 +30,22 @@ jobs:
       - name: Run tests
         run: bats --print-output-on-failure tests/
 
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Build test image
+        run: docker build --target test -t cloudops-toolkit:test .
+      - name: Run Bats inside the container
+        run: docker run --rm cloudops-toolkit:test
+      - name: Build runtime image
+        run: docker build --target base -t cloudops-toolkit:latest .
+      - name: Smoke test the runtime image
+        run: docker run --rm cloudops-toolkit:latest ./scripts/disk-alert.sh 100 /
+
   deploy:
-    needs: [shellcheck, test]
+    needs: [shellcheck, test, docker]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
