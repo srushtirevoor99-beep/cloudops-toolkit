@@ -54,6 +54,7 @@ A push or pull request triggers automated checks. When changes reach `main` and 
 | GitHub Actions + OIDC | CI/CD with short-lived AWS credentials |
 | ShellCheck | Static analysis for shell scripts |
 | Bats | Automated shell-script tests |
+| Docker | Reproducible runtime and test images (multi-stage build, non-root user) |
 | cron | Scheduled backups and monitoring checks |
 | Git and GitHub | Version control, branches, and pull requests |
 
@@ -81,6 +82,7 @@ Workflow file: [`.github/workflows/ci.yml`](.github/workflows/ci.yml)
 |---|---|
 | `shellcheck` | Lints every `*.sh` file under `scripts/` and `tests/`, plus the test stubs in `tests/stubs/`. |
 | `test` | Runs the Bats suite. Fake AWS commands let tests exercise S3, restore, and SNS paths without using live AWS credentials. |
+| `docker` | Builds the test image, runs the Bats suite inside the container, builds the runtime image, and smoke-tests it. The `deploy` job waits for it. |
 | `deploy` | Runs on `main` after the required checks pass. It authenticates with OIDC and uses SSM Run Command to run `git pull --ff-only origin main` on the EC2 instance. It then waits for the command, prints its status, and fails the job (showing the command's stderr) if the status is not `Success`. |
 
 ### How Keyless Deployment Works
@@ -201,6 +203,30 @@ shellcheck scripts/*.sh tests/*.sh tests/stubs/*
 bats tests/
 ```
 
+### Run with Docker
+
+The `Dockerfile` has two stages: `base` (the runtime image) and `test` (adds Bats and the test suite).
+
+```bash
+# Run the whole test suite inside a container
+docker build --target test -t cloudops-toolkit:test .
+docker run --rm cloudops-toolkit:test
+
+# Build the runtime image and run a local backup
+docker build --target base -t cloudops-toolkit:latest .
+docker run --rm \
+  -v ~/testdata:/data \
+  -v ~/testbackups:/backups \
+  cloudops-toolkit:latest ./scripts/backup.sh /data /backups
+```
+
+Notes:
+
+- The image runs as a non-root user (`toolkit`), so files written to a mounted folder belong to the user with ID 1000 on the host.
+- Mounted host folders must already exist. Docker creates a missing host folder silently, which would back up an empty directory.
+- Containers use UTC, so the date in an archive name can differ from your local date.
+- AWS credentials are never baked into the image. To upload to S3 from a container, provide credentials at run time (for example `-e AWS_PROFILE` with a mounted `~/.aws`, or an instance role on EC2) and set `BUCKET_NAME` with `-e`.
+
 ### Verify a Backup Archive
 
 Download a backup and inspect its contents:
@@ -236,6 +262,8 @@ cloudops-toolkit/
 │   ├── iam/
 │   ├── s3-lifecycle.json
 │   └── screenshots/
+├── Dockerfile
+├── .dockerignore
 ├── CONTRIBUTING.md
 ├── LICENSE
 ├── .gitignore
@@ -315,7 +343,9 @@ The latest local test run reported **42 passing Bats tests**, and the pull reque
 - [x] S3 lifecycle rule: backups expire after 30 days
 - [ ] Turn on SNS failure alerts on the instance
 - [ ] Manage the EC2 instance, roles and bucket with Terraform ([aws-terraform-infra](https://github.com/srushtirevoor99-beep/aws-terraform-infra))
-- [ ] Containerise the toolkit and run it as a scheduled task
+- [x] Dockerfile with a non-root runtime image, a Bats test stage and a CI job
+- [ ] Scan the image in CI and push it to Amazon ECR with OIDC
+- [ ] Run the container as a scheduled task
 
 ## Author
 
