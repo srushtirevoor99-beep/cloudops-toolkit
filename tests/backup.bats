@@ -35,6 +35,28 @@ setup() {
     [ "$status" -ne 0 ]
 }
 
+@test "fails when the source folder is empty and leaves no archive" {
+    EMPTY="$BATS_TEST_TMPDIR/empty"
+    mkdir -p "$EMPTY"
+    run "$SCRIPTS/backup.sh" "$EMPTY" "$DEST"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"is empty"* ]]
+    run bash -c "ls '$DEST'/backup-*.tar.gz"
+    [ "$status" -ne 0 ]
+}
+
+@test "an empty source does not push older backups out through retention" {
+    EMPTY="$BATS_TEST_TMPDIR/empty"
+    mkdir -p "$EMPTY" "$DEST"
+    for d in 01 02 03 04 05; do
+        touch "$DEST/backup-2020-01-$d.tar.gz"
+    done
+    run "$SCRIPTS/backup.sh" "$EMPTY" "$DEST"
+    [ "$status" -eq 1 ]
+    [ "$(find "$DEST" -name 'backup-*.tar.gz' | wc -l)" -eq 5 ]
+    [ -e "$DEST/backup-2020-01-01.tar.gz" ]
+}
+
 @test "keeps only the 5 newest local backups by default" {
     mkdir -p "$DEST"
     for d in 01 02 03 04 05 06 07; do
